@@ -3,10 +3,11 @@ const path = require('path');
 const utils = require('./utils.js');
 const fs = require('fs');
 const app = express();
-const port = 3000;
 const dir = './blockchain-network';
 var pubK = "";
 var privK = "";
+const args = process.argv.slice(2);
+const port = args[0];
 
 escapeRegExp = (string)=> {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
@@ -55,9 +56,12 @@ app.get('/exist/:nport/:pubKey', (req,res) => {
 				}
 			}
 		}
+		var ledger = fs.readFileSync(dir+"/"+port+"/ledger.txt",{encoding:'utf8', flag:'r'});
+		
 		var exist = {
 			publicKey : publicKey,
-			port : port
+			port : port,
+			ledger : ledger.toString()
 		}
 		res.send(exist);
 	});
@@ -70,49 +74,47 @@ app.get('/transactionview/:loc', (req,res) => {
 	var successtransaction = '<li class="list-group-item d-flex justify-content-between align-items-center list-group-item-success" ><span class="badge badge-primary badge-pill">SNUM</span>TRANSACTION</li>'
 	fs.readFile(dir+"/"+port+"/transactions.txt", (err, data) => {
 		fs.readFile(path.join(__dirname,'../view/page.html'),'utf-8', (err, html) => {
-			fs.readFile(path.join(__dirname,'../view/addressitem.html'),'utf-8', (err, list) => {
-				try{
-					var t = data.toString().split("\n");
-					var list = [];
-					html += transactionhtml;
-					for(let i=0;i<t.length;i++){
-						if(t[i] == ''){
-							continue;
-						}
-						list.push(t[i]);
+			try{
+				var t = data.toString().split("\n");
+				var list = [];
+				html += transactionhtml;
+				for(let i=0;i<t.length;i++){
+					if(t[i] == ''){
+						continue;
 					}
-					successIndex = list.length-1;
-					var item = "";
-					for(let i=0;i<t.length;i++){
-						if(t[i] == ''){
-							continue;
-						}
-						if(i == successIndex && loc == 1){
-							item = successtransaction;
-
-						}else{
-							item = transactionitem;
-						}
-						var tdisplay = ""
-						for(let j=0;j<t[i].length;j++){
-							if(j%92==0){
-								tdisplay += "<br>";
-							}
-							tdisplay += t[i].charAt(j);
-						}
-						item = item.replace("TRANSACTION", tdisplay);
-						item = item.replace("SNUM", (i+1));
-						html += item;
-					}
-					html += '</ul></div></body></html>';
-					html = replaceAll(html, 'XXXX', port);
-					html = html.replace('PUBKEY', pubK);
-					html = html.replace('PRIKEY', privK);
-					res.send(html);
-				}catch(err){
-					console.log(err);
+					list.push(t[i]);
 				}
-			});
+				successIndex = list.length-1;
+				var item = "";
+				for(let i=0;i<t.length;i++){
+					if(t[i] == ''){
+						continue;
+					}
+					if(i == successIndex && loc == 1){
+						item = successtransaction;
+
+					}else{
+						item = transactionitem;
+					}
+					var tdisplay = ""
+					for(let j=0;j<t[i].length;j++){
+						if(j%92==0){
+							tdisplay += "<br>";
+						}
+						tdisplay += t[i].charAt(j);
+					}
+					item = item.replace("TRANSACTION", tdisplay);
+					item = item.replace("SNUM", (i+1));
+					html += item;
+				}
+				html += '</ul></div></body></html>';
+				html = replaceAll(html, 'XXXX', port);
+				html = html.replace('PUBKEY', pubK);
+				html = html.replace('PRIKEY', privK);
+				res.send(html);
+			}catch(err){
+				console.log(err);
+			}
 		});
 	});
 });
@@ -125,9 +127,6 @@ app.get('/transactionlistener/:transaction', (req,res) => {
 	var publicKey = pukstart + t[1].substring(0,128) +"\n"+ pukend;
 	var onlyTransaction = t[0] + "COIN" + t[1].substring(0,256);
 	var sign = t[1].substring(256);
-	console.log("TRA: "+ onlyTransaction);
-	console.log("SIGN: "+ sign);
-	console.log("PUBK: "+publicKey);
 	var verify = utils.verifyDS(onlyTransaction, sign, publicKey);
 	if(verify){
 		fs.appendFileSync(dir + "/" + port + "/transactions.txt", transaction+"\n");
@@ -180,7 +179,7 @@ app.get('/transact', (req,res) => {
 	var sign = utils.createDS(transaction, privK);
 	var verify = utils.verifyDS(transaction, sign, pubK);
 	transaction += sign;
-	utils.broadcastTransaction(transaction);
+	utils.broadcastTransaction(transaction, port);
 	//Redirect to Transaction
 	res.redirect('/transactionview/1');
 });
@@ -282,7 +281,7 @@ app.get('/home', (req,res) => {
 	//check if current host (port) folder exists
 	if(!fs.existsSync(dir+"/"+port)){
 		fs.mkdirSync(dir+"/"+port);
-		utils.genFiles(res);
+		utils.genFiles(res, port);
 	}else{
 		fs.readFile(path.join(__dirname,'../view/home.html'),'utf-8', (err, html) => {
 			fs.readFile(dir+"/"+port+"/keys.txt", (err, data) => {
