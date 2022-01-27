@@ -26,14 +26,35 @@ app.get('/',(req,res) => {
 //On receiving existance message from a node, add the node's address to address list and send your address to the new node
 app.get('/exist/:nport/:pubKey', (req,res) => {
 	var entry = req.params.nport+","+req.params.pubKey+"\n";
-	console.log("Entry : "+ entry);
 	fs.appendFile(dir+"/"+port+"/addressbook.txt", entry, (err) => {
 		if(err) throw err;
-		console.log("Saved!");
 	})
 	fs.readFile(dir+"/"+port+"/keys.txt", (err, data) => {
 		var keys = data.toString().split("\n");
-		var publicKey = keys[0];
+		var publicKey = "";
+		var privateKey = "";
+		let pukstart = "-----BEGIN PUBLIC KEY-----";
+		let pukend = "-----END PUBLIC KEY-----";
+		let pikstart = "-----BEGIN PRIVATE KEY-----";
+		let pikend = "-----END PRIVATE KEY-----";
+		for(let i=0;i<keys.length;i++){
+			if(keys[i] == pukstart){
+				i++;
+				while(keys[i] != pukend){
+					publicKey += keys[i];
+					i++;
+				}
+			}
+		}
+		for(let i=0;i<keys.length;i++){
+			if(keys[i] == pikstart){
+				i++;
+				while(keys[i] != pikend){
+					privateKey += keys[i];
+					i++;
+				}
+			}
+		}
 		var exist = {
 			publicKey : publicKey,
 			port : port
@@ -49,18 +70,8 @@ app.get('/transact', (req,res) => {
 	for(let i=0;i<recPubKey.length;i++){
 		rpk += recPubKey[i];
 	}
-	pubK = pubK.replace('/\s+/g', ' ').trim().split("\n")
-	privK = privK.replace('/\s+/g', ' ').trim().split("\n");
-	pub = "";
-	for(let i=0;i<pubK.length;i++){
-		pub += pubK[i];
-	}
-	priv = "";
-	for(let i=0;i<privK.length;i++){
-		priv += privK[i];
-	}
 	transaction = coin+"COIN"+pub+"TO"+rpk;
-	var sign = utils.createDS(transaction, pub, priv);
+	var sign = utils.createDS(transaction, pub, privK);
 	console.log(transaction);
 	res.send(req.query);
 })
@@ -69,21 +80,25 @@ app.get('/address', (req,res) => {
 	fs.readFile(dir+"/"+port+"/addressbook.txt", (err, data) => {
 		fs.readFile(path.join(__dirname,'../view/addresslist.html'),'utf-8', (err, html) => {
 			fs.readFile(path.join(__dirname,'../view/addressitem.html'),'utf-8', (err, list) => {
-				var address = data.toString().split("\n");
-				for(let i=0;i<address.length-1;i++){
-					var item = list;
-					var pt = address[i].split(",")[0];
-					var pk = address[i].split(",")[1];
-					var pkDisplay = "";
-					for(let k=0;k<pk.length;k++){
-						if(k%64 == 0){
-							pkDisplay += "<br>";
+				try{
+					var address = data.toString().split("\n");
+					for(let i=0;i<address.length-1;i++){
+						var item = list;
+						var pt = address[i].split(",")[0];
+						var pk = address[i].split(",")[1];
+						var pkDisplay = "";
+						for(let k=0;k<pk.length;k++){
+							if(k%64 == 0){
+								pkDisplay += "<br>";
+							}
+							pkDisplay += pk.charAt(k);
 						}
-						pkDisplay += pk.charAt(k);
+						item = item.replace('PKADD111', pkDisplay);
+						item = item.replace('PTADD222', pt);
+						html += item;	
 					}
-					item = item.replace('PKADD111', pkDisplay);
-					item = item.replace('PTADD222', pt);
-					html += item;	
+				}catch(err){
+					console.log(err);
 				}
 				html += '</ul></div></body></html>';
 				html = replaceAll(html, 'XXXX', port);
@@ -147,14 +162,36 @@ app.get('/home', (req,res) => {
 	if(!fs.existsSync(dir+"/"+port)){
 		fs.mkdirSync(dir+"/"+port);
 		utils.genFiles(res);
-		console.log("NODE FILE DOES NOT EXIST");
-		console.log("Joined successfully");
 	}else{
 		fs.readFile(path.join(__dirname,'../view/home.html'),'utf-8', (err, html) => {
 			fs.readFile(dir+"/"+port+"/keys.txt", (err, data) => {
 				var keys = data.toString().split("\n");
-				var publicKey = keys[0];
-				var privateKey = keys[1];
+				var publicKey = "";
+				var privateKey = "";
+				let pukstart = "-----BEGIN PUBLIC KEY-----";
+				let pukend = "-----END PUBLIC KEY-----";
+				let pikstart = "-----BEGIN PRIVATE KEY-----";
+				let pikend = "-----END PRIVATE KEY-----";
+				for(let i=0;i<keys.length;i++){
+					if(keys[i] == pukstart){
+						i++;
+						while(keys[i] != pukend){
+							publicKey += keys[i];
+							i++;
+						}
+					}
+				}
+				for(let i=0;i<keys.length;i++){
+					if(keys[i] == pikstart){
+						i++;
+						while(keys[i] != pikend){
+							privateKey += keys[i];
+							i++;
+						}
+					}
+				}
+				pubK = pukstart+"\n"+publicKey+"\n"+pukend+"\n";
+				privK = pikstart+"\n"+privateKey+"\n"+pikend+"\n";
 				var privKeyDisplay = "";
 				var pubKeyDisplay = "";
 				var c = 0;
