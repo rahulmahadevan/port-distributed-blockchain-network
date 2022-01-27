@@ -63,18 +63,72 @@ app.get('/exist/:nport/:pubKey', (req,res) => {
 	});
 });
 
+app.get('/transactionlistener/:transaction', (req,res) => {
+	var transaction = req.params.transaction;
+	var t = transaction.split("COIN");
+	let pukstart = "-----BEGIN PUBLIC KEY-----\n";
+	let pukend = "-----END PUBLIC KEY-----\n";
+	var publicKey = pukstart + t[1].substring(0,128) +"\n"+ pukend;
+	var onlyTransaction = t[0] + "COIN" + t[1].substring(0,256);
+	var sign = t[1].substring(256);
+	console.log("TRA: "+ onlyTransaction);
+	console.log("SIGN: "+ sign);
+	console.log("PUBK: "+publicKey);
+	var verify = utils.verifyDS(onlyTransaction, sign, publicKey);
+	if(verify){
+		fs.appendFileSync(dir + "/" + port + "/transactions.txt", transaction+"\n");
+		res.send({
+			ok: 'OK'
+		});
+	}else{
+		res.send({
+			ok: 'NO'
+		});
+	}
+})
+
 app.get('/transact', (req,res) => {
-	var recPubKey = req.query.publicKey.replace('/\s+/g', ' ').trim().split(" ");
+	var recPubKey = req.query.publicKey.split(" ");
 	var coin = req.query.coin;
 	var rpk = ""
 	for(let i=0;i<recPubKey.length;i++){
 		rpk += recPubKey[i];
 	}
-	transaction = coin+"COIN"+pub+"TO"+rpk;
-	var sign = utils.createDS(transaction, pub, privK);
-	console.log(transaction);
-	res.send(req.query);
-})
+	const data = fs.readFileSync(dir+"/"+port+"/keys.txt",{encoding:'utf8', flag:'r'});
+	var keys = data.toString().split("\n");
+	var publicKey = "";
+	var privateKey = "";
+	let pukstart = "-----BEGIN PUBLIC KEY-----";
+	let pukend = "-----END PUBLIC KEY-----";
+	let pikstart = "-----BEGIN PRIVATE KEY-----";
+	let pikend = "-----END PRIVATE KEY-----";
+	for(let i=0;i<keys.length;i++){
+		if(keys[i] == pukstart){
+			i++;
+			while(keys[i] != pukend){
+				publicKey += keys[i];
+				i++;
+			}
+		}
+	}
+	for(let i=0;i<keys.length;i++){
+		if(keys[i] == pikstart){
+			i++;
+			while(keys[i] != pikend){
+				privateKey += keys[i];
+				i++;
+			}
+		}
+	}
+	pubK = pukstart+"\n"+publicKey+"\n"+pukend+"\n";
+	privK = pikstart+"\n"+privateKey+"\n"+pikend+"\n";
+	transaction = coin+"COIN"+publicKey+rpk;
+	var sign = utils.createDS(transaction, privK);
+	var verify = utils.verifyDS(transaction, sign, pubK);
+	transaction += sign;
+	utils.broadcastTransaction(transaction);
+	//Redirect to Transaction
+});
 
 app.get('/address', (req,res) => {
 	fs.readFile(dir+"/"+port+"/addressbook.txt", (err, data) => {
@@ -134,9 +188,19 @@ app.get('/ledger', (req,res) => {
 					for(let i=0;i<transactions.length;i++){
 						var t = transactions[i].split("COIN");
 						var coins = t[0];
-						var from = t[1].split("TO")[0];
-						var to = t[1].split("TO")[1];
-						transaction += "TRANSACTION #"+(i+1)+" - "+coins+" COINS<br>FROM: "+from+"<br>TO: "+to+"<br>";
+						var from ="";
+						var to="";
+						var sign = "";
+						if(t[1].length < 256){
+							from = "0";
+							to = t[1].substring(1,129);
+							sign = t[1].substring(129);
+						}else{
+							from = t[1].substring(0,128);
+							to = t[1].substring(128,256);
+							sign = t[1].substring(256);
+						}
+						transaction += "TRANSACTION #"+(i+1)+" - "+coins+" COINS<br>FROM: "+from+"<br>TO: "+to+"<br>SIGN: "+sign+"<br>";
 					}
 					cardLayout += closeCard;
 					cardLayout = cardLayout.replace('#$#$',transaction);

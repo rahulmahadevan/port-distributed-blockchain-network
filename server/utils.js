@@ -8,11 +8,54 @@ const port = 3000;
 const difficulty = 2;
 
 
-module.exports.createDS = (transaction, publicKey, privateKey) => {
-	let signer = crypto.createSign('sha256');
-	signer.update(transaction);
-	let signature = signer.sign(privateKey, 'hex');
-	console.log(signature);
+module.exports.createDS = (transaction, privateKey) => {
+	return signTransaction(transaction, privateKey);
+}
+
+module.exports.verifyDS = (transaction, sign, publicKey) => {
+	return verifyTransaction(transaction, sign, publicKey);
+}
+
+signTransaction = (transaction, privateKey) => {
+	let signer = crypto.createSign('RSA-SHA256');
+	signer.write(transaction);
+	signer.end();
+	let signature = signer.sign(privateKey, 'base64');
+	return signature;
+}
+
+verifyTransaction = (transaction, signature, publicKey) => {
+	let verifier = crypto.createVerify('RSA-SHA256');
+	verifier.update(transaction);
+	let ver = verifier.verify(publicKey, signature , 'base64');
+	return ver;
+}
+
+module.exports.broadcastTransaction = (transaction) => {
+	var data = fs.readFileSync(dir+"/"+port+"/addressbook.txt",{encoding:'utf8', flag:'r'});
+	var address = data.toString().split("\n");
+	transaction = replaceAll(transaction,'/', '%2F');
+	for(let i=0;i<address.length;i++){
+		var nport = address[i].substring(0,4);
+		if(nport == ''){
+			continue;
+		}
+		let url = 'http://localhost:'+nport+'/transactionlistener/'+transaction;
+		console.log("URL: "+url);
+		http.get(url , (res) => {
+			let data = "";
+			res.on('data', (chunk) => {
+				data += chunk;
+			});
+
+			res.on('end', () => {
+				var reply = JSON.parse(data).ok;
+				console.log(reply);
+			});
+		}).on('error', (err) => {
+			//PORTS NOT RUNNING WILL THROW ERROR
+		})
+	}
 }
 
 module.exports.genFiles = (res) => {
@@ -34,7 +77,7 @@ module.exports.genFiles = (res) => {
 	(err, publicKey, privateKey) => {
 		if(!err){
 			pubKey = publicKey.toString('hex');
-			privKey = privateKey.toString('hex')
+			privKey = privateKey.toString('hex');
 			var content = pubKey + "\n" + privKey;
 			fs.writeFile(dir+"/"+port+"/keys.txt",content, (err,file) =>{
 				if(err) throw err;
@@ -53,7 +96,7 @@ module.exports.genFiles = (res) => {
 				}
 			}
 			genAddressList(port,publicKey);
-			genLedgerFile(publicKey);
+			genLedgerFile(publicKey, privKey, pubKey);
 		}else{
 			console.log("Crypto error");
 		}
@@ -62,12 +105,15 @@ module.exports.genFiles = (res) => {
 	});
 }
 
-genLedgerFile = (pubKey) => {
+genLedgerFile = (pubKey, privKeyCert, pubKeyCert) => {
 	prefix = '';
 	for(let i=0;i<difficulty;i++){
 		prefix += '0';
 	}
-	blockData = '100COIN0TO'+pubKey;
+	blockData = '100COIN0'+pubKey;
+	var sign = signTransaction(blockData, privKeyCert);
+	var verify = verifyTransaction(blockData, sign, pubKeyCert);
+	blockData += sign;
 	block = 0;
 	prevHash = 0;
 	timestamp = Date.now();
@@ -84,6 +130,7 @@ genLedgerFile = (pubKey) => {
 	fs.writeFile(dir + "/" + port + "/ledger.txt", genesis, (err,file) => {
 		if(err) throw err;
 	});
+	fs.writeFileSync(dir + "/" + port + "/transactions.txt", blockData+"\n");
 }
 
 genAddressList = (portNum, pubKey) => {
