@@ -224,54 +224,53 @@ app.get('/ledger', (req,res) => {
 	var ledgerHtml = '<h1 class="display-4">Ledger</h1><div class="card-group">'
 	var closeCard = '</div>';
 	var closeHtml = '</div></div></body></html>';
+	var card = '<div class="card"><div class="card-header">Block #$000</div><div class="card-body"><h5 class="card-title">Block Hash: #$555</h5><h6 class="card-title">Previous Block Hash: #$111</h5><h6 class="card-title">Timestamp: #$222</h5><h6 class="card-title">Markle Root: #$333</h5><h6 class="card-title">Nonce: #$444</h5><a href="#" class="btn btn-primary" data-toggle="collapse" data-target="#collapse*$*" aria-expanded="false" aria-controls="collapse*$*">View Transactions</a><div class="collapse" id="collapse*$*"><div class="card card-body">#$#$</div></div></div></div>';
 	fs.readFile(path.join(__dirname,'../view/page.html'),'utf-8', (err, html)=> {
-		fs.readFile(path.join(__dirname,'../view/card.html'),'utf-8', (err, card)=> {
-			fs.readFile(dir+"/"+port+"/ledger.txt", (err, data) => {
-				html += ledgerHtml;
-				var blocks = data.toString().split("#####");
-				var crr = 0;
-				for(var i=0;i<blocks.length-1;i++){
-					var cardLayout = card;
-					blockContent = blocks[i].split("\n");
-					for(let j=0+crr;j<6+crr;j++){
-						cardLayout = cardLayout.replace("#$"+(j-crr)+(j-crr)+(j-crr), blockContent[j].split(":")[1]);
-					}
-					transactions = [];
-					for(let j=6+crr;j<blockContent.length;j++){
-						if(blockContent[j] != ''){
-							transactions.push(blockContent[j]);
-						}
-					}
-					var transaction = "";
-					for(let i=0;i<transactions.length;i++){
-						var t = transactions[i].split("COIN");
-						var coins = t[0];
-						var from ="";
-						var to="";
-						var sign = "";
-						if(t[1].length < 256){
-							from = "0";
-							to = t[1].substring(1,129);
-							sign = t[1].substring(129);
-						}else{
-							from = t[1].substring(0,128);
-							to = t[1].substring(128,256);
-							sign = t[1].substring(256);
-						}
-						transaction += "TRANSACTION #"+(i+1)+" - "+coins+" COINS<br>FROM: "+from+"<br>TO: "+to+"<br>SIGN: "+sign+"<br>";
-					}
-					cardLayout += closeCard;
-					cardLayout = cardLayout.replace('#$#$',transaction);
-					cardLayout = replaceAll(cardLayout,'*$*',i);
-					html += cardLayout;
-					crr = 1;
+		fs.readFile(dir+"/"+port+"/ledger.txt", (err, data) => {
+			html += ledgerHtml;
+			var blocks = data.toString().split("#####");
+			var crr = 0;
+			for(var i=0;i<blocks.length-1;i++){
+				var cardLayout = card;
+				blockContent = blocks[i].split("\n");
+				for(let j=0+crr;j<6+crr;j++){
+					cardLayout = cardLayout.replace("#$"+(j-crr)+(j-crr)+(j-crr), blockContent[j].split(":")[1]);
 				}
-				html += closeHtml;
-				html = replaceAll(html, 'XXXX', port);
-				html = html.replace('PUBKEY', pubK);
-				html = html.replace('PRIKEY', privK);
-				res.send(html);
-			});
+				transactions = [];
+				for(let j=6+crr;j<blockContent.length;j++){
+					if(blockContent[j] != ''){
+						transactions.push(blockContent[j]);
+					}
+				}
+				var transaction = "";
+				for(let i=0;i<transactions.length;i++){
+					var t = transactions[i].split("COIN");
+					var coins = t[0];
+					var from ="";
+					var to="";
+					var sign = "";
+					if(t[1].length < 256){
+						from = "0";
+						to = t[1].substring(1,129);
+						sign = t[1].substring(129);
+					}else{
+						from = t[1].substring(0,128);
+						to = t[1].substring(128,256);
+						sign = t[1].substring(256);
+					}
+					transaction += "TRANSACTION #"+(i+1)+" - "+coins+" COINS<br>FROM: "+from+"<br>TO: "+to+"<br>SIGN: "+sign+"<br>";
+				}
+				cardLayout += closeCard;
+				cardLayout = cardLayout.replace('#$#$',transaction);
+				cardLayout = replaceAll(cardLayout,'*$*',i);
+				html += cardLayout;
+				crr = 1;
+			}
+			html += closeHtml;
+			html = replaceAll(html, 'XXXX', port);
+			html = html.replace('PUBKEY', pubK);
+			html = html.replace('PRIKEY', privK);
+			res.send(html);
 		});
 	});
 });
