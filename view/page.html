@@ -20,36 +20,4 @@
 	  		<a class="navbar-brand" href="http://localhost:XXXX/">Logout</a>
 	  	</div>
 	</nav>
-
 	<div class="jumbotron">
-	 	<h1 class="display-4">Wallet</h1>
-	 	<h3>Coin Balance: $$$</h3>
-	 	<p class="lead" id="home-keys"></p>
-	 	<hr class="my-4">
-	 	<h4>Public Key:</h4><p>PUBKEY</p>
-	 	<h4>Private Key:</h4><p>PRIKEY</p>
-	 	<p class="lead">
-		    <a class="btn btn-info btn-lg text-break" href="#" role="button" data-toggle="collapse" data-target="#collapseTransact" aria-expanded="false" aria-controls="collapseTransact">Make a Transaction</a>
-	  	</p>
-		<div class="collapse" id="collapseTransact">
-			<form action="http://localhost:XXXX/transact" method="get">  
-			 	<div class="card card-body">
-			  		<div class="input-group mb-3">
-				  		<div class="input-group-prepend">
-				    		<span class="input-group-text" id="basic-addon1">To</span>
-						</div>
-				  		<input type="text" name="publicKey" class="form-control" placeholder="Receiver Public Key Address" aria-label="Username" aria-describedby="basic-addon1">
-					</div>
-			  		<div class="input-group mb-3">
-				  		<div class="input-group-prepend">
-				    		<span class="input-group-text" id="basic-addon1">$</span>
-				  		</div>
-				  		<input type="text" class="form-control" name="coin" placeholder="Coin Value" aria-label="Username" aria-describedby="basic-addon1">
-					</div>
-					<button type="submit" class="btn btn-warning w-25">Send</button>
-			  	</div>
-			</form>
-		</div>
-	</div>
-</body>
-</html>

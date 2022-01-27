@@ -63,6 +63,60 @@ app.get('/exist/:nport/:pubKey', (req,res) => {
 	});
 });
 
+app.get('/transactionview/:loc', (req,res) => {
+	var loc = req.params.loc;
+	var transactionhtml = '<h1 class="display-4">Transaction List</h1><h3>Shows the transaction received from the network</h3><ul class="list-group"><li class="list-group-item d-flex justify-content-between align-items-center list-group-item-primary"><span class="badge badge-primary badge-pill">SNo.</span>Transaction</li>';
+	var transactionitem = '<li class="list-group-item d-flex justify-content-between align-items-center" ><span class="badge badge-primary badge-pill">SNUM</span>TRANSACTION</li>'
+	var successtransaction = '<li class="list-group-item d-flex justify-content-between align-items-center list-group-item-success" ><span class="badge badge-primary badge-pill">SNUM</span>TRANSACTION</li>'
+	fs.readFile(dir+"/"+port+"/transactions.txt", (err, data) => {
+		fs.readFile(path.join(__dirname,'../view/page.html'),'utf-8', (err, html) => {
+			fs.readFile(path.join(__dirname,'../view/addressitem.html'),'utf-8', (err, list) => {
+				try{
+					var t = data.toString().split("\n");
+					var list = [];
+					html += transactionhtml;
+					for(let i=0;i<t.length;i++){
+						if(t[i] == ''){
+							continue;
+						}
+						list.push(t[i]);
+					}
+					successIndex = list.length-1;
+					var item = "";
+					for(let i=0;i<t.length;i++){
+						if(t[i] == ''){
+							continue;
+						}
+						if(i == successIndex && loc == 1){
+							item = successtransaction;
+
+						}else{
+							item = transactionitem;
+						}
+						var tdisplay = ""
+						for(let j=0;j<t[i].length;j++){
+							if(j%92==0){
+								tdisplay += "<br>";
+							}
+							tdisplay += t[i].charAt(j);
+						}
+						item = item.replace("TRANSACTION", tdisplay);
+						item = item.replace("SNUM", (i+1));
+						html += item;
+					}
+					html += '</ul></div></body></html>';
+					html = replaceAll(html, 'XXXX', port);
+					html = html.replace('PUBKEY', pubK);
+					html = html.replace('PRIKEY', privK);
+					res.send(html);
+				}catch(err){
+					console.log(err);
+				}
+			});
+		});
+	});
+});
+
 app.get('/transactionlistener/:transaction', (req,res) => {
 	var transaction = req.params.transaction;
 	var t = transaction.split("COIN");
@@ -128,48 +182,52 @@ app.get('/transact', (req,res) => {
 	transaction += sign;
 	utils.broadcastTransaction(transaction);
 	//Redirect to Transaction
+	res.redirect('/transactionview/1');
 });
 
 app.get('/address', (req,res) => {
+	var addresshtml = '<h1 class="display-4">Address Book</h1><ul class="list-group"><li class="list-group-item d-flex justify-content-between align-items-center list-group-item-primary">Public Key Address<span class="badge badge-primary badge-pill">Port Address</span></li>';
+	var list = '<li class="list-group-item d-flex justify-content-between align-items-center" >PKADD111<span class="badge badge-primary badge-pill">PTADD222</span></li>'
 	fs.readFile(dir+"/"+port+"/addressbook.txt", (err, data) => {
-		fs.readFile(path.join(__dirname,'../view/addresslist.html'),'utf-8', (err, html) => {
-			fs.readFile(path.join(__dirname,'../view/addressitem.html'),'utf-8', (err, list) => {
-				try{
-					var address = data.toString().split("\n");
-					for(let i=0;i<address.length-1;i++){
-						var item = list;
-						var pt = address[i].split(",")[0];
-						var pk = address[i].split(",")[1];
-						var pkDisplay = "";
-						for(let k=0;k<pk.length;k++){
-							if(k%64 == 0){
-								pkDisplay += "<br>";
-							}
-							pkDisplay += pk.charAt(k);
+		fs.readFile(path.join(__dirname,'../view/page.html'),'utf-8', (err, html) => {
+			try{
+				html += addresshtml;
+				var address = data.toString().split("\n");
+				for(let i=0;i<address.length-1;i++){
+					var item = list;
+					var pt = address[i].split(",")[0];
+					var pk = address[i].split(",")[1];
+					var pkDisplay = "";
+					for(let k=0;k<pk.length;k++){
+						if(k%64 == 0){
+							pkDisplay += "<br>";
 						}
-						item = item.replace('PKADD111', pkDisplay);
-						item = item.replace('PTADD222', pt);
-						html += item;	
+						pkDisplay += pk.charAt(k);
 					}
-				}catch(err){
-					console.log(err);
+					item = item.replace('PKADD111', pkDisplay);
+					item = item.replace('PTADD222', pt);
+					html += item;	
 				}
-				html += '</ul></div></body></html>';
-				html = replaceAll(html, 'XXXX', port);
-				html = html.replace('PUBKEY', pubK);
-				html = html.replace('PRIKEY', privK);
-				res.send(html);
-			})			
-		})
-	})
+			}catch(err){
+				console.log(err);
+			}
+			html += '</ul></div></body></html>';
+			html = replaceAll(html, 'XXXX', port);
+			html = html.replace('PUBKEY', pubK);
+			html = html.replace('PRIKEY', privK);
+			res.send(html);
+		});
+	});
 });
 
 app.get('/ledger', (req,res) => {
+	var ledgerHtml = '<h1 class="display-4">Ledger</h1><div class="card-group">'
 	var closeCard = '</div>';
 	var closeHtml = '</div></div></body></html>';
-	fs.readFile(path.join(__dirname,'../view/ledger.html'),'utf-8', (err, html)=> {
+	fs.readFile(path.join(__dirname,'../view/page.html'),'utf-8', (err, html)=> {
 		fs.readFile(path.join(__dirname,'../view/card.html'),'utf-8', (err, card)=> {
 			fs.readFile(dir+"/"+port+"/ledger.txt", (err, data) => {
+				html += ledgerHtml;
 				var blocks = data.toString().split("#####");
 				var crr = 0;
 				for(var i=0;i<blocks.length-1;i++){

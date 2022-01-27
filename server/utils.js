@@ -134,7 +134,7 @@ genLedgerFile = (pubKey, privKeyCert, pubKeyCert) => {
 }
 
 genAddressList = (portNum, pubKey) => {
-	var nport = port;
+	var nport = port + 1;
 	var flag = 1;
 	pubKey = replaceAll(pubKey,'/', '%2F');
 	while(flag == 1 && nport <3002){
