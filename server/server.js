@@ -78,6 +78,7 @@ app.get('/transactionview/:loc', (req,res) => {
 				var t = data.toString().split("\n");
 				var list = [];
 				html += transactionhtml;
+				var index = 0;
 				for(let i=0;i<t.length;i++){
 					if(t[i] == ''){
 						continue;
@@ -104,7 +105,8 @@ app.get('/transactionview/:loc', (req,res) => {
 						tdisplay += t[i].charAt(j);
 					}
 					item = item.replace("TRANSACTION", tdisplay);
-					item = item.replace("SNUM", (i+1));
+					item = item.replace("SNUM", (index+1));
+					index += 1;
 					html += item;
 				}
 				html += '</ul></div></body></html>';
@@ -121,12 +123,22 @@ app.get('/transactionview/:loc', (req,res) => {
 
 app.get('/transactionlistener/:transaction', (req,res) => {
 	var transaction = req.params.transaction;
+	console.log("\n"+transaction);
 	var t = transaction.split("COIN");
 	let pukstart = "-----BEGIN PUBLIC KEY-----\n";
 	let pukend = "-----END PUBLIC KEY-----\n";
-	var publicKey = pukstart + t[1].substring(0,128) +"\n"+ pukend;
-	var onlyTransaction = t[0] + "COIN" + t[1].substring(0,256);
-	var sign = t[1].substring(256);
+	var publicKey = "";
+	var onlyTransaction = "";
+	if(t[1].length < 256){
+		from = "0";
+		publicKey = pukstart + t[1].substring(1,129) +"\n"+ pukend;
+		sign = t[1].substring(129);
+		onlyTransaction = t[0] + "COIN" + from + t[1].substring(1,129);
+	}else{
+		publicKey = pukstart + t[1].substring(0,128) +"\n"+ pukend;
+		onlyTransaction = t[0] + "COIN" + t[1].substring(0,256);
+		sign = t[1].substring(256);
+	}
 	var verify = utils.verifyDS(onlyTransaction, sign, publicKey);
 	if(verify){
 		fs.appendFileSync(dir + "/" + port + "/transactions.txt", transaction+"\n");
@@ -179,6 +191,7 @@ app.get('/transact', (req,res) => {
 	var sign = utils.createDS(transaction, privK);
 	var verify = utils.verifyDS(transaction, sign, pubK);
 	transaction += sign;
+	fs.appendFileSync(dir+"/"+port+"/transactions.txt", transaction);
 	utils.broadcastTransaction(transaction, port);
 	//Redirect to Transaction
 	res.redirect('/transactionview/1');
@@ -208,7 +221,7 @@ app.get('/address', (req,res) => {
 					html += item;	
 				}
 			}catch(err){
-				console.log(err);
+				console.log("No nodes in the network");
 			}
 			html += '</ul></div></body></html>';
 			html = replaceAll(html, 'XXXX', port);

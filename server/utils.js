@@ -31,6 +31,36 @@ verifyTransaction = (transaction, signature, publicKey) => {
 }
 
 module.exports.broadcastTransaction = (transaction, port) => {
+	submitTransaction(transaction,port);
+}
+
+sendTransaction = (transaction, port, senderPort) => {
+	transaction = replaceAll(transaction,'/', '%2F');
+	transactionFile = fs.readFileSync(dir+"/"+port+"/transactions.txt",{encoding:'utf8', flag:'r'}).toString();
+	if(transactionFile == ""){
+		fs.writeFileSync(dir+"/"+port+"/transactions.txt", transaction);
+	}
+	let url = 'http://localhost:'+senderPort+'/transactionlistener/'+transaction;
+	console.log("URL: "+url);
+	http.get(url , (res) => {
+		let data = "";
+		res.on('data', (chunk) => {
+			data += chunk;
+		});
+
+		res.on('end', () => {
+			try{
+				var reply = JSON.parse(data).ok;
+			}catch(err){
+				console.log("Neighbor at Port "+senderPort+" is offline");
+			}
+		});
+	}).on('error', (err) => {
+		//PORTS NOT RUNNING WILL THROW ERROR
+	})
+}
+
+submitTransaction = (transaction, port) => {
 	var data = fs.readFileSync(dir+"/"+port+"/addressbook.txt",{encoding:'utf8', flag:'r'});
 	var address = data.toString().split("\n");
 	transaction = replaceAll(transaction,'/', '%2F');
@@ -48,7 +78,11 @@ module.exports.broadcastTransaction = (transaction, port) => {
 			});
 
 			res.on('end', () => {
-				var reply = JSON.parse(data).ok;
+				try{
+					var reply = JSON.parse(data).ok;
+				}catch(err){
+					console.log("Neighbor at Port "+nport+" is offline");
+				}
 			});
 		}).on('error', (err) => {
 			//PORTS NOT RUNNING WILL THROW ERROR
@@ -95,8 +129,7 @@ module.exports.genFiles = (res, port) => {
 		}else{
 			console.log("Crypto error");
 		}
-		displayHome(res);
-		return Promise.resolve([pubKey,privKey]);
+		displayHome(res, port);
 	});
 }
 
@@ -124,13 +157,18 @@ genLedgerFile = (pubKey, privKeyCert, pubKeyCert, port) => {
 	genesis += '\nnonce:'+nonce+'\nhash:'+hash+'\n'+blockData+"\n#####";
 	fs.writeFileSync(dir + "/" + port + "/ledger.txt", genesis);
 	fs.writeFileSync(dir + "/" + port + "/transactions.txt", blockData+"\n");
+	console.log("INIT Transaction written - "+blockData);
 }
 
 genAddressList = (portNum, pubKey, port) => {
+	var lastPort = 3005;
+	var failed = 0;
 	var nport = 3000;
 	var flag = 1;
+	var noOtherNode = true;
+	transaction = fs.readFileSync(dir+"/"+port+"/transactions.txt",{encoding:'utf8', flag:'r'}).toString();
 	pubKey = replaceAll(pubKey,'/', '%2F');
-	while(flag == 1 && nport <3005){
+	while(flag == 1 && nport <= lastPort){
 		if(nport == port){
 			nport += 1;
 			continue;
@@ -143,24 +181,27 @@ genAddressList = (portNum, pubKey, port) => {
 			});
 
 			res.on('end', () => {
-				var entry = JSON.parse(data).port+","+JSON.parse(data).publicKey+"\n";
+				var nodePort = JSON.parse(data).port;
+				var entry = nodePort +","+JSON.parse(data).publicKey+"\n";
+				fs.appendFileSync(dir+"/"+port+"/addressbook.txt", entry) 
 				var ledger = JSON.parse(data).ledger;
-				var currLedger = fs.readFileSync(dir+"/"+port+"/ledger.txt",{encoding:'utf8', flag:'r'}).toString();;
-				if(ledger.length > currLedger.length){
+				var currLedger = fs.readFileSync(dir+"/"+port+"/ledger.txt",{encoding:'utf8', flag:'r'}).toString();
+				sendTransaction(transaction,port, nodePort);
+				if(ledger.length >= currLedger.length){
+					console.log("Got existing ledger");
 					fs.writeFileSync(dir+"/"+port+"/ledger.txt",ledger);
 				}
-				fs.appendFile(dir+"/"+port+"/addressbook.txt", entry, (err) => {
-					if(err) throw err;
-				})
 			});
 		}).on('error', (err) => {
 			//PORTS NOT RUNNING WILL THROW ERROR
 		})
 		nport = nport + 1;
 	}
+	fs.writeFileSync(dir+"/"+port+"/transactions.txt","");
+
 }
 
-displayHome = (res) => {
+displayHome = (res, port) => {
 	res.redirect('/home')
 }
 
