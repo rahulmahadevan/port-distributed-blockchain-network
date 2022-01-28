@@ -142,9 +142,7 @@ app.get('/transactionlistener/:transaction', (req,res) => {
 	var verify = utils.verifyDS(onlyTransaction, sign, publicKey);
 	if(verify){
 		fs.appendFileSync(dir + "/" + port + "/transactions.txt", transaction+"\n");
-		res.send({
-			ok: 'OK'
-		});
+		res.redirect('/ledger');
 	}else{
 		res.send({
 			ok: 'NO'
@@ -195,6 +193,120 @@ app.get('/transact', (req,res) => {
 	utils.broadcastTransaction(transaction, port);
 	//Redirect to Transaction
 	res.redirect('/transactionview/1');
+});
+
+app.get('/mining', (req,res) => {
+	var miningHtml = '<h1 class="display-4">Mine a Block</h1><h3>Select 5 transaction to add to the new block</h3><form action="http://localhost:XXXX/startmining" method="get"><ul class="list-group">';
+	var checkbox = '<li class="list-group-item"><input class="form-check-input me-1" type="checkbox" name="TNO" value="TRANSACTIONVAL" aria-label="...">TRANSACTIONVIEW</li>'
+	var heading = '<li class="list-group-item d-flex justify-content-between align-items-center list-group-item-primary"><span class="badge badge-primary badge-pill">Select</span>Transaction</li>'
+	var submitButton = '<button type="submit" class="btn btn-warning w-25">Start Mining</button>'
+	fs.readFile(dir+"/"+port+"/transactions.txt", (err, data) => {	
+		fs.readFile(path.join(__dirname,'../view/page.html'),'utf-8', (err, html) =>{
+			try{
+				html += miningHtml;
+				html += heading;
+				var t = data.toString().split("\n");
+				for(let i=0;i<t.length;i++){
+					if(t[i] == ''){
+						continue;
+					}
+					var item = checkbox;
+					var tdisplay = ""
+					for(let j=0;j<t[i].length;j++){
+						if(j%92==0){
+							tdisplay += "<br>";
+						}
+						tdisplay += t[i].charAt(j);
+					}
+					item = item.replace("TNO", (i+1));
+					item = item.replace("TRANSACTIONVAL", t[i]);
+					item = replaceAll(item, "TRANSACTIONVIEW", tdisplay);
+					html += item;
+				}
+			}catch(err){
+				console.log(err);
+			}
+			
+			html += submitButton;
+			html += '</ul></form></div></body></html>';
+			html = replaceAll(html, 'XXXX', port);
+			res.send(html);
+		});
+	});
+});
+
+app.get('/blockListener/:block', (req,res) => {
+	var block = req.params.block;
+	var blockContent = block.split("\n");
+	var calMarkleRoot = "";
+	var prevHash = "";
+	var markleRoot = "";
+	var hash = "";
+	var nonce = "";
+	var timestamp = "";
+	for(let i=0;i<6;i++){
+		var key = blockContent[i].split(":")[0];
+		if(key == 'previousHash'){
+			prevHash = blockContent[i].split(":")[1];
+		}else if(key == "timestamp"){
+			timestamp = blockContent[i].split(":")[1];
+		}else if(key == "markleRoot"){
+			markleRoot = blockContent[i].split(":")[1];
+		}else if(key == "nonce"){
+			nonce = blockContent[i].split(":")[1];
+		}else if(key == "hash"){
+			hash = blockContent[i].split(":")[1];
+		}
+	}
+	for(let i=6; i<blockContent.length;i++){
+		if(blockContent[i]!="#####"){
+			calMarkleRoot += blockContent[i];
+		}
+	}
+	calMarkleRoot = utils.hash(calMarkleRoot);
+	if(calMarkleRoot == markleRoot){
+		var blockstring = ""+prevHash+timestamp+markleRoot+nonce;
+		var calHash = utils.hash(blockstring);
+		if(calHash == hash){
+			console.log("BLOCK VERIFIED");
+			fs.appendFileSync(dir + "/" + port + "/ledger.txt", block+"#####");
+			res.send({
+				ok : 'OK'
+			});
+		}else{
+			console.log("MALICIOUS BLOCK CONTENTS");
+			res.send({
+				ok : 'NO'
+			});
+		}
+	}else{
+		console.log("MALICIOUS TRANSACTIONS");
+		res.send({
+			ok : 'NO'
+		});
+	}
+});
+
+app.get('/startmining', (req,res) =>{
+	var timestamp = Date.now();
+	var transactions = req.query;
+	const keys = Object.keys(transactions);
+	var markleRoot = "";
+	var transactionList = "";
+	for(let i=0;i<keys.length;i++){
+		transactionList += "\n" + transactions[keys[i]];
+		var t = replaceAll(transactions[keys[i]], '%2F','/')
+		markleRoot += t;
+	}
+	markleRoot = utils.hash(markleRoot);
+	var blockNum = utils.getPreviousBlockNumber(port);
+	var prevHash = utils.getPreviousBlockHash(port);
+	var blockstring = ""+ prevHash + timestamp + markleRoot;
+	var nonce = utils.findNonce(blockstring);
+	var hash = utils.hash(blockstring+nonce);
+	var newBlock = "block:"+(blockNum+1)+"\npreviousHash:"+prevHash+"\ntimestamp:"+timestamp+"\nmarkleRoot:"+markleRoot+"\nnonce:"+nonce+"\nhash:"+hash+transactionList+"\n#####";
+	fs.appendFileSync(dir + "/" + port + "/ledger.txt", "\n"+newBlock);
+	utils.broadcastBlock(newBlock, port);
 });
 
 app.get('/address', (req,res) => {

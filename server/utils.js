@@ -34,6 +34,35 @@ module.exports.broadcastTransaction = (transaction, port) => {
 	submitTransaction(transaction,port);
 }
 
+module.exports.broadcastBlock = (block, port) => {
+	var data = fs.readFileSync(dir+"/"+port+"/addressbook.txt",{encoding:'utf8', flag:'r'});
+	var address = data.toString().split("\n");
+	block = replaceAll(block,'/', '%2F');
+	for(let i=0;i<address.length;i++){
+		var nport = address[i].substring(0,4);
+		if(nport == ''){
+			continue;
+		}
+		let url = 'http://localhost:'+nport+'/blockListener/'+block;
+		http.get(url , (res) => {
+			let data = "";
+			res.on('data', (chunk) => {
+				data += chunk;
+			});
+
+			res.on('end', () => {
+				try{
+					var reply = JSON.parse(data).ok;
+				}catch(err){
+					console.log("Neighbor at Port "+nport+" is offline");
+				}
+			});
+		}).on('error', (err) => {
+			//PORTS NOT RUNNING WILL THROW ERROR
+		})
+	}
+}
+
 sendTransaction = (transaction, port, senderPort) => {
 	transaction = replaceAll(transaction,'/', '%2F');
 	transactionFile = fs.readFileSync(dir+"/"+port+"/transactions.txt",{encoding:'utf8', flag:'r'}).toString();
@@ -41,7 +70,6 @@ sendTransaction = (transaction, port, senderPort) => {
 		fs.writeFileSync(dir+"/"+port+"/transactions.txt", transaction);
 	}
 	let url = 'http://localhost:'+senderPort+'/transactionlistener/'+transaction;
-	console.log("URL: "+url);
 	http.get(url , (res) => {
 		let data = "";
 		res.on('data', (chunk) => {
@@ -70,7 +98,6 @@ submitTransaction = (transaction, port) => {
 			continue;
 		}
 		let url = 'http://localhost:'+nport+'/transactionlistener/'+transaction;
-		console.log("URL: "+url);
 		http.get(url , (res) => {
 			let data = "";
 			res.on('data', (chunk) => {
@@ -133,6 +160,51 @@ module.exports.genFiles = (res, port) => {
 	});
 }
 
+module.exports.hash = (transaction) => {
+	return crypto.createHash('sha256').update(transaction).digest('hex');
+}
+
+module.exports.getPreviousBlockHash = (port) => {
+	var data = fs.readFileSync(dir+"/"+port+"/ledger.txt",{encoding:'utf8', flag:'r'}).toString();
+	var block = data.toString().split("#####");
+	var last = block.length - 1;
+	if(block[last] == ""){
+		last = last -1;
+	}
+	var blockContents = block[last].split("\n");
+	for(let i=0;i<blockContents.length;i++){
+		var key = blockContents[i].split(":")[0];
+		if(key == 'hash'){
+			return blockContents[i].split(":")[1];
+		}
+	}
+}
+
+module.exports.getPreviousBlockNumber = (port) => {
+	var data = fs.readFileSync(dir+"/"+port+"/ledger.txt",{encoding:'utf8', flag:'r'}).toString();
+	var block = data.toString().split("#####");
+	var last = block.length - 1;
+	if(block[last] == ""){
+		last = last -1;
+	}
+	return last;
+}
+
+//Proof of Work
+module.exports.findNonce = (blockstring) => {
+	prefix = '';
+	for(let i=0;i<difficulty;i++){
+		prefix += '0';
+	}
+	var nonce = 0;
+	var hash = crypto.createHash('sha256').update(blockstring+nonce).digest('hex');
+	while(hash.substring(0,difficulty) != prefix){
+		nonce =  nonce+1;
+		hash = crypto.createHash('sha256').update(blockstring+nonce).digest('hex');
+	}
+	return nonce; 
+}
+
 genLedgerFile = (pubKey, privKeyCert, pubKeyCert, port) => {
 	prefix = '';
 	for(let i=0;i<difficulty;i++){
@@ -145,9 +217,9 @@ genLedgerFile = (pubKey, privKeyCert, pubKeyCert, port) => {
 	block = 0;
 	prevHash = 0;
 	timestamp = Date.now();
-	markleRoot = crypto.createHash('sha256').update(blockData).digest('hex');;
+	markleRoot = crypto.createHash('sha256').update(blockData).digest('hex');
 	var genesis = 'block:0\npreviousHash:0\ntimestamp:'+timestamp+'\nmarkleRoot:'+markleRoot;
-	var blockstring = ""+block + prevHash + timestamp + markleRoot;
+	var blockstring = ""+ prevHash + timestamp + markleRoot;
 	var nonce = 0;
 	var hash = crypto.createHash('sha256').update(blockstring+nonce).digest('hex');
 	while(hash.substring(0,difficulty) != prefix){
@@ -157,7 +229,6 @@ genLedgerFile = (pubKey, privKeyCert, pubKeyCert, port) => {
 	genesis += '\nnonce:'+nonce+'\nhash:'+hash+'\n'+blockData+"\n#####";
 	fs.writeFileSync(dir + "/" + port + "/ledger.txt", genesis);
 	fs.writeFileSync(dir + "/" + port + "/transactions.txt", blockData+"\n");
-	console.log("INIT Transaction written - "+blockData);
 }
 
 genAddressList = (portNum, pubKey, port) => {
@@ -188,7 +259,6 @@ genAddressList = (portNum, pubKey, port) => {
 				var currLedger = fs.readFileSync(dir+"/"+port+"/ledger.txt",{encoding:'utf8', flag:'r'}).toString();
 				sendTransaction(transaction,port, nodePort);
 				if(ledger.length >= currLedger.length){
-					console.log("Got existing ledger");
 					fs.writeFileSync(dir+"/"+port+"/ledger.txt",ledger);
 				}
 			});
