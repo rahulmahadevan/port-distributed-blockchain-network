@@ -54,6 +54,7 @@ module.exports.broadcastBlock = (block, port) => {
 				try{
 					var reply = JSON.parse(data).ok;
 				}catch(err){
+					console.log(err);
 					console.log("Neighbor at Port "+nport+" is offline");
 				}
 			});
@@ -61,6 +62,24 @@ module.exports.broadcastBlock = (block, port) => {
 			//PORTS NOT RUNNING WILL THROW ERROR
 		})
 	}
+	let url = 'http://localhost:'+port+'/blockListener/'+block;
+		http.get(url , (res) => {
+			let data = "";
+			res.on('data', (chunk) => {
+				data += chunk;
+			});
+
+			res.on('end', () => {
+				try{
+					var reply = JSON.parse(data).ok;
+				}catch(err){
+					console.log(err);
+					console.log("Neighbor at Port "+port+" is offline");
+				}
+			});
+		}).on('error', (err) => {
+			//PORTS NOT RUNNING WILL THROW ERROR
+		})
 }
 
 sendTransaction = (transaction, port, senderPort) => {
@@ -228,6 +247,7 @@ genLedgerFile = (pubKey, privKeyCert, pubKeyCert, port) => {
 	}
 	genesis += '\nnonce:'+nonce+'\nhash:'+hash+'\n'+blockData+"\n#####";
 	fs.writeFileSync(dir + "/" + port + "/ledger.txt", genesis);
+	fs.writeFileSync(dir + "/" + port + "/balance.txt", "100");
 	fs.writeFileSync(dir + "/" + port + "/transactions.txt", blockData+"\n");
 }
 
@@ -260,6 +280,7 @@ genAddressList = (portNum, pubKey, port) => {
 				sendTransaction(transaction,port, nodePort);
 				if(ledger.length >= currLedger.length){
 					fs.writeFileSync(dir+"/"+port+"/ledger.txt",ledger);
+					fs.writeFileSync(dir + "/" + port + "/balance.txt", "0");
 				}
 			});
 		}).on('error', (err) => {

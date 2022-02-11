@@ -153,7 +153,10 @@ app.get('/transactionlistener/:transaction', (req,res) => {
 app.get('/transact', (req,res) => {
 	var recPubKey = req.query.publicKey.split(" ");
 	var coin = req.query.coin;
-	var rpk = ""
+	balance = Number(fs.readFileSync(dir+"/"+port+"/balance.txt",{encoding:'utf8', flag:'r'}).toString());
+	balance = balance - Number(coin);
+	fs.writeFileSync(dir + "/" + port + "/balance.txt", balance);
+	var rpk = "";
 	for(let i=0;i<recPubKey.length;i++){
 		rpk += recPubKey[i];
 	}
@@ -196,7 +199,7 @@ app.get('/transact', (req,res) => {
 });
 
 app.get('/mining', (req,res) => {
-	var miningHtml = '<h1 class="display-4">Mine a Block</h1><h3>Select 5 transaction to add to the new block</h3><form action="http://localhost:XXXX/startmining" method="get"><ul class="list-group">';
+	var miningHtml = '<h1 class="display-4">Mine a Block</h1><h3>Select at least 1 transaction to add to the new block</h3><form action="http://localhost:XXXX/startmining" method="get"><ul class="list-group">';
 	var checkbox = '<li class="list-group-item"><input class="form-check-input me-1" type="checkbox" name="TNO" value="TRANSACTIONVAL" aria-label="...">TRANSACTIONVIEW</li>'
 	var heading = '<li class="list-group-item d-flex justify-content-between align-items-center list-group-item-primary"><span class="badge badge-primary badge-pill">Select</span>Transaction</li>'
 	var submitButton = '<button type="submit" class="btn btn-warning w-25">Start Mining</button>'
@@ -238,6 +241,31 @@ app.get('/mining', (req,res) => {
 app.get('/blockListener/:block', (req,res) => {
 	var block = req.params.block;
 	var blockContent = block.split("\n");
+	keys = fs.readFileSync(dir+"/"+port+"/keys.txt",{encoding:'utf8', flag:'r'}).toString().split("\n");
+	var publicKey = "";
+	var privateKey = "";
+	let pukstart = "-----BEGIN PUBLIC KEY-----";
+	let pukend = "-----END PUBLIC KEY-----";
+	let pikstart = "-----BEGIN PRIVATE KEY-----";
+	let pikend = "-----END PRIVATE KEY-----";
+	for(let i=0;i<keys.length;i++){
+		if(keys[i] == pukstart){
+			i++;
+			while(keys[i] != pukend){
+				publicKey += keys[i];
+				i++;
+			}
+		}
+	}
+	for(let i=0;i<keys.length;i++){
+		if(keys[i] == pikstart){
+			i++;
+			while(keys[i] != pikend){
+				privateKey += keys[i];
+				i++;
+			}
+		}
+	}
 	var calMarkleRoot = "";
 	var prevHash = "";
 	var markleRoot = "";
@@ -258,18 +286,52 @@ app.get('/blockListener/:block', (req,res) => {
 			hash = blockContent[i].split(":")[1];
 		}
 	}
+	transactionsList = fs.readFileSync(dir+"/"+port+"/transactions.txt",{encoding:'utf8', flag:'r'}).toString().split("\n");
+	newtransactionsList = [];
 	for(let i=6; i<blockContent.length;i++){
 		if(blockContent[i]!="#####"){
 			calMarkleRoot += blockContent[i];
+			console.log(blockContent[i]);
+			try{
+				var t = blockContent[i].split("COIN");
+				newtransactionsList.push(blockContent[i]);
+				coin = t[0];
+				var to, from, sign;
+				if(t[1].length < 256){
+					from = "0";
+					to = t[1].substring(1,129);
+					sign = t[1].substring(129);
+				}else{
+					from = t[1].substring(0,128);
+					to = t[1].substring(128,256);
+					sign = t[1].substring(256);
+				}
+				if(to == publicKey){
+					var balance = Number(fs.readFileSync(dir+"/"+port+"/balance.txt",{encoding:'utf8', flag:'r'}).toString());
+					balance = balance + Number(coin);
+					fs.writeFileSync(dir + "/" + port + "/balance.txt", balance);
+				}
+			}catch(err){
+
+			}
 		}
 	}
+	updatedtransaction = transactionsList.filter(x => !newtransactionsList.includes(x));
+	transactionstring = "";
+	for(let i=0;i<updatedtransaction.length;i++){
+		transactionstring += updatedtransaction[i];
+		if(i != updatedtransaction.length-1){
+			transactionstring += "\n";
+		}
+	}
+	fs.writeFileSync(dir + "/" + port + "/transactions.txt", transactionstring);
 	calMarkleRoot = utils.hash(calMarkleRoot);
 	if(calMarkleRoot == markleRoot){
 		var blockstring = ""+prevHash+timestamp+markleRoot+nonce;
 		var calHash = utils.hash(blockstring);
 		if(calHash == hash){
 			console.log("BLOCK VERIFIED");
-			fs.appendFileSync(dir + "/" + port + "/ledger.txt", block+"#####");
+			fs.appendFileSync(dir + "/" + port + "/ledger.txt", "\n"+block+"#####");
 			res.send({
 				ok : 'OK'
 			});
@@ -305,8 +367,8 @@ app.get('/startmining', (req,res) =>{
 	var nonce = utils.findNonce(blockstring);
 	var hash = utils.hash(blockstring+nonce);
 	var newBlock = "block:"+(blockNum+1)+"\npreviousHash:"+prevHash+"\ntimestamp:"+timestamp+"\nmarkleRoot:"+markleRoot+"\nnonce:"+nonce+"\nhash:"+hash+transactionList+"\n#####";
-	fs.appendFileSync(dir + "/" + port + "/ledger.txt", "\n"+newBlock);
 	utils.broadcastBlock(newBlock, port);
+	res.redirect('/ledger');
 });
 
 app.get('/address', (req,res) => {
@@ -348,7 +410,7 @@ app.get('/ledger', (req,res) => {
 	var ledgerHtml = '<h1 class="display-4">Ledger</h1><div class="card-group">'
 	var closeCard = '</div>';
 	var closeHtml = '</div></div></body></html>';
-	var card = '<div class="card"><div class="card-header">Block #$000</div><div class="card-body"><h5 class="card-title">Block Hash: #$555</h5><h6 class="card-title">Previous Block Hash: #$111</h5><h6 class="card-title">Timestamp: #$222</h5><h6 class="card-title">Markle Root: #$333</h5><h6 class="card-title">Nonce: #$444</h5><a href="#" class="btn btn-primary" data-toggle="collapse" data-target="#collapse*$*" aria-expanded="false" aria-controls="collapse*$*">View Transactions</a><div class="collapse" id="collapse*$*"><div class="card card-body">#$#$</div></div></div></div>';
+	var card = '<div class="card"><div class="card-header">Block #$000</div><div class="card-body"><h5 class="card-title">Block Hash: #$555</h5><h6 class="card-title">Previous Block Hash: #$111</h5><h6 class="card-title">Timestamp: #$222</h5><h6 class="card-title">Markle Root: #$333</h5><h6 class="card-title">Nonce: #$444</h5><a href="#" class="btn btn-primary" data-toggle="collapse" data-target="#collapse*$*" aria-expanded="false" aria-controls="collapse*$*">View Transactions</a><div class="collapse" id="collapse*$*"><div class="card card-body">#$#$</div></div></div>';
 	fs.readFile(path.join(__dirname,'../view/page.html'),'utf-8', (err, html)=> {
 		fs.readFile(dir+"/"+port+"/ledger.txt", (err, data) => {
 			html += ledgerHtml;
@@ -466,7 +528,8 @@ app.get('/home', (req,res) => {
 				coins = t[0];
 				from = t[1].split("TO")[0];
 				to = t[1].split("TO")[1];
-				html = replaceAll(html, '$$$', coins);
+				balance = Number(fs.readFileSync(dir+"/"+port+"/balance.txt",{encoding:'utf8', flag:'r'}).toString());
+				html = replaceAll(html, '$$$', balance);
 				res.send(html);
 			})
 		});
